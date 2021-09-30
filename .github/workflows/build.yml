@@ -1,0 +1,51 @@
+name: Build LibreELEC for X96 Mini Plus
+
+# Controls when the action will run. 
+on:
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+
+env:
+  REPO_URL: https://github.com/maskedeken/LibreELEC-AML
+  TZ: Asia/Shanghai
+
+jobs:
+  build:
+    runs-on: ubuntu-18.04
+
+    steps:
+    - name: Clone source code
+      working-directory: /workdir
+      run: |
+        df -hT $PWD
+        git clone --recurse-submodules $REPO_URL libreelec
+        ln -sf /workdir/libreelec $GITHUB_WORKSPACE/libreelec
+
+    - name: Make image
+      id: compile
+      run: |
+        cd libreelec
+        PROJECT=S905 DEVICE=X96-Mini-Plus ARCH=arm make image -j8
+
+    - name: Generate release tag
+      id: tag
+      if: !cancelled()
+      run: |
+        echo "::set-output name=release_tag::$(date +"%Y.%m.%d-%H%M")"
+        echo "::set-output name=status::success"
+
+    - name: Upload firmware to release
+      uses: softprops/action-gh-release@v1
+      if: steps.compile.outputs.status == 'success' && !cancelled()
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ steps.tag.outputs.release_tag }}
+        files: libreelec/target/*.gz
+
+    - name: Delete workflow runs
+      uses: GitRML/delete-workflow-runs@main
+      with:
+        retain_days: 1
+        keep_minimum_runs: 3
+
